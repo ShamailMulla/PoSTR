@@ -1,0 +1,68 @@
+gpu: true
+data_dir: ""
+save: false
+save_freq: 1000
+load: false
+load_dir: "./logdir/[env]/BTRL-[name]/[seed]/checkpoints/[timestep]/"
+visual: False
+
+
+algorithm:
+  name: BTRL
+  update_freq: 100
+  warmup_length: 1e1
+  warmup_freq: 1e1
+  policy_noise: 0.0
+  n_samples: 1
+  temp: 1e-4
+
+experiment:
+  suite: bsuite
+  env: "5"
+  test: true
+  deterministic: true
+  steps: 1e6
+  time_limit: 300
+  test_freq: 1e3
+  name: ""
+  seed: None
+
+replay:
+  # 1e2 transitions (~20 episodes) caused world-model collapse in the 1M run:
+  # the buffer degenerated to left-biased episodes, the model overtrained onto
+  # the marginal mode, and the Thompson posterior died (see diagnose_checkpoint.py).
+  capacity: 1e4
+  batch_size: 100
+  sequence_length: 10
+
+transition:
+  obs_type: "grid"
+  # reduced 20 -> 10: with a small early buffer, 20 iterations per update
+  # over-trains the model onto whatever the buffer currently holds
+  training_iterations: 10
+  hidden_dim: 256
+  learning_rate: 1e-3
+  window_length: 3
+  context_length: 2
+  num_encoder_layers: 1
+  heads: 1
+  forward_expansion: 2
+  p_seq: 0.1
+  p_attn: 0.15
+
+value:
+  training_iterations: 10
+  # hidden_layers is now respected by TRL/networks/value.py; it was previously
+  # ignored and the network always built 2 hidden layers. Set to 2 to keep the
+  # baseline architecture unchanged.
+  hidden_layers: 2
+  hidden_dim: 256
+  learning_rate: 1e-2
+  target_update_freq: 50
+  discount: 0.95
+
+terminal:
+  training_iterations: 3
+  hidden_layer: 1
+  hidden_dim: 8
+  learning_rate: 1e-3

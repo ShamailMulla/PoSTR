@@ -1,0 +1,62 @@
+gpu: true
+data_dir: ""
+save: false
+save_freq: 1000
+load: false
+load_dir: "./logdir/[env]/BTRL-[name]/[seed]/checkpoints/[timestep]/"
+visual: False
+
+
+algorithm:
+  name: BTRL
+  update_freq: 100
+  warmup_length: 1e1
+  warmup_freq: 1e1
+  policy_noise: 0.0
+  n_samples: 1
+  temp: 1e-4
+
+experiment:
+  suite: bsuite
+  env: "3"
+  test: true
+  deterministic: false
+  steps: 1e4
+  time_limit: 300
+  test_freq: 1e2
+  name: ""
+  seed: None
+
+replay:
+  capacity: 1e2
+  batch_size: 100
+  sequence_length: 10
+
+transition:
+  obs_type: "grid"
+  training_iterations: 10
+  hidden_dim: 4
+  learning_rate: 1e-2
+  window_length: 3
+  context_length: 1
+  num_encoder_layers: 2
+  heads: 1
+  forward_expansion: 4
+  p_seq: 0.2
+  p_attn: 0.05
+
+value:
+  training_iterations: 10
+  hidden_layers: 2  # was ignored before value.py respected it; 2 preserves the old architecture
+  hidden_dim: 4
+  learning_rate: 1e-2
+  target_update_freq: 20
+  discount: 0.99
+
+terminal:
+  training_iterations: 3
+  hidden_layer: 0
+  hidden_dim: 8
+  learning_rate: 1e-3
+
+

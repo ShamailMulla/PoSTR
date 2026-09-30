@@ -1,6 +1,103 @@
-# Posterior Sampling for Deep Reinforcement Learning
+# PoSTR — Posterior Sampling with Transformers for RL
 
-Implementation of Posterior Sampling for Deep Reinforcement Learning [(PSDRL)](https://proceedings.mlr.press/v202/sasso23a.html) in PyTorch.
+MSc thesis project (Queen Mary University of London). PoSTR (called BTRL in the code:
+`TRL/`, `BTRL` agent class) extends [PSDRL](https://github.com/remosasso/PSDRL) —
+Posterior Sampling for Deep RL — by replacing its GRU transition model with a
+Transformer world model, with Thompson sampling over world models for deep
+exploration. Evaluated on bsuite DeepSea.
+
+This repository is a fork of PSDRL. Upstream PSDRL, with the thesis's changes for
+DeepSea, lives in [`baselines/psdrl/`](baselines/psdrl/) and is the baseline.
+
+> **Branches.** `main` holds the code as of **30 July 2026** (thesis state). Ongoing
+> development — bug fixes, standard randomized DeepSea, MLflow tracking, planning in
+> the sampled model — happens on the development branch; see
+> [Known issues in this snapshot](#known-issues-in-this-snapshot).
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `src/main.py`, `src/run_*.py` | PoSTR entry points (`run_v3_1M.py` runs one seed of the neural-linear agent for 1M steps) |
+| `src/TRL/` | the PoSTR package: `agent/btrl.py` (agent), `networks/transition.py` (Transformer world model, BayesFormer dropout), `bayes/neural_linear_head.py` (Bayesian linear regression posterior over transformer features, v3+), `training/` (transition and value training), `common/` (replay, env wrappers, utils), `tuning/` (hyperparameter-search code) |
+| `src/configs/` | experiment configs (`config_v3_neural_linear.yaml` is the main PoSTR config; v5/v6 are the ring-buffer and frozen-feature ablations) |
+| `src/hpo1_transition_search.ipynb` | Optuna search for the transition network (stage 1 of the pipeline in `docs/HPO_REPORT.md`); `generate_hpo_notebooks.py` regenerates it and stages 2–3 |
+| `src/optuna_*_hparam_search.ipynb` | earlier single-notebook Optuna searches (transition, value) |
+| `src/*.ipynb`, `src/TRL/tuning/test1_*.ipynb` | transition-model experiments from the original thesis submission |
+| `baselines/psdrl/` | PSDRL baseline: upstream code plus a bsuite DeepSea / MemoryChain wrapper, DeepSea configs and Optuna notebooks (`param_tuning/`) |
+| `docs/` | `HPO_REPORT.md`, `BTRL_v2_report.md`, `SEEDED_COMPARISON_REPORT.md` (5-seed PoSTR vs PSDRL, July 2026) and the research wiki (`docs/wiki/home.md`) |
+| `CLAUDE.md` | architecture notes and execution flow |
+
+## Setup
+
+Python 3.10, CUDA GPU recommended.
+
+```bash
+pip install -r requirements.txt
+```
+
+## Running
+
+PoSTR, one seed of the main configuration (neural-linear posterior, deterministic DeepSea-5):
+
+```bash
+cd src
+python run_v3_1M.py --seed 1 --name postr_det --explore_temp 4
+```
+
+PSDRL baseline, one seed:
+
+```bash
+cd baselines/psdrl/src
+python main.py --config configs/psdrl_deepsea5_prior1e3_1M.yaml --seed 1
+```
+
+Logs and checkpoints go to `logdir/` under the working directory (TensorBoard events
+plus `metrics.jsonl`).
+
+Hyperparameter search for the transition network: open `src/hpo1_transition_search.ipynb`
+and run all cells (200 NSGA-II trials on a fixed offline dataset; the Optuna study is
+stored in `src/hpo_artifacts/optuna_btrl.db` and is resumable).
+
+## Provenance of this snapshot
+
+The original working copy was lost in August 2026. This snapshot was rebuilt from the
+editor's saved file versions and session logs, so a few files are reconstructions:
+
+- `src/TRL/common/logger.py`, `src/TRL/common/data_manager.py`,
+  `src/TRL/networks/terminal.py` — restored from full-file reads in the session logs.
+- `src/TRL/agent/__init__.py` (`from .btrl import BTRL as Agent`) and the other package
+  `__init__.py` files — recreated; the originals were not captured.
+- `src/hpo1_transition_search.ipynb` — regenerated with `generate_hpo_notebooks.py`
+  (no outputs; the July study results were lost).
+- `src/posterior_alive.py`, `src/*_gate.sh`, `src/rca_watch.sh`,
+  `src/v3_stoch_launcher.sh`, `src/configs/config_btrl_vector_env5.yaml`,
+  `baselines/psdrl/src/configs/psdrl_deepsea5_ctrl.yaml` — recovered from the session logs.
+
+Some July configs and analysis scripts could not be recovered (e.g. the v8 LoRA and v9
+configs, `best_*_config.yaml` tuning outputs, plotting scripts). All run outputs
+(`logdir/`, checkpoints, Optuna databases) were lost; the results survive only in `docs/`.
+
+## Known issues in this snapshot
+
+Found in September 2026 and fixed on the development branch — they affect every
+result produced with this code:
+
+1. **PoSTR does not run standard DeepSea.** `TRL/common/utils.py` builds DeepSea with
+   `randomize_actions=False` (bsuite's debug mode, where one action is "right" in every
+   cell) and `env_step` ends the episode with reward 0.99 on *reaching* the bottom-right
+   cell. The PSDRL baseline runs standard randomized DeepSea, so PoSTR-vs-PSDRL numbers
+   compare different tasks.
+2. **PSDRL test environment is a different task.** `baselines/psdrl/.../deepsea_wrapper.py`
+   passes no `mapping_seed`, so bsuite draws a fresh random action mapping for the
+   training and the test environment.
+3. **Reward-loss shape bug.** `TRL/training/transition.py` (and the freeze-check loss in
+   `agent/btrl.py`) compare a `[B,1]` prediction with a `[B,1,1]` target, which
+   broadcasts the loss over all B×B prediction/target pairs.
+
+## Citation
+
+PoSTR builds on PSDRL:
 
 ```
 @inproceedings{sasso2023posterior,
@@ -10,81 +107,3 @@ Implementation of Posterior Sampling for Deep Reinforcement Learning [(PSDRL)](h
   year = {2023}
 }
 ```
-
-## Overview
-
-PSDRL is the first truly scalable approximation of Posterior Sampling for Reinforcement Learning (PSRL) that retains its model-based essence. In the Atari benchmark, PSDRL significantly outperforms previous state-of-the-art attempts at scaling up posterior sampling such as Bootstrapped DQN + Priors and Successor Uncertainties, while being strongly competitive with the state-of-the-art DreamerV2 agent, both in sample efficiency and computational efficiency. 
-
-PSDRL maps high-dimensional observations to a low-dimensional continuous latent state using an autoencoder (a) that enables predicting transitions in latent state space for any given action using a recurrent transition model (b).
-
-![Continuous Latent Space Transition Model](https://imgur.com/XfLun7N.png)
-
-PSDRL represents uncertainty through a Bayesian neural network that maintains a distribution over the parameters of the last layer of the transition model, which allows PSDRL to sample a model of the environment.
-Planning w.r.t. the sampled model is carried out with a value network that is fitted using predictions from the sampled model, thereby approximating the optimal policy w.r.t. the sampled model.
-The agent then collects data by acting greedily w.r.t. the current sampled model and value network.
-
-<p align="center">
-<img src="https://imgur.com/AoCb3g9.png" width=50% height=50%>
-</p>
-
-By acting greedily w.r.t. different sampled models, the exploration of the agent is naturally driven through uncertainty over models of the environments.
-An example of trajectories predicted with different sampled models can be found below.
-Although each trajectory starts from the same initial state and uses identical parameters for the neural network components, it is possible to notice a remarkable diversity among the different sampled models.
-
-<p align="center">
-<img src="https://imgur.com/EcnPvtr.gif">
-</p>
-
-For further details, results, and comparisons see the [research paper](https://arxiv.org/pdf/2305.00477.pdf).
-
-## Instructions
-
-Install the dependencies:
-```
-pip install -r requirements.txt
-```
-
-You can run the PSDRL agent by calling the [main.py](https://github.com/remosasso/PSDRL-new/blob/master/src/main.py) file, which accepts a configuration file (in the yaml format) and the code name corresponding to the Atari game.
-For example, you can run the PSDRL agent on _Pong_ with the parameters from the paper as,
-```
-python src/main.py --config="src/config.yaml" --env="Pong"
-```
-You can set a fixed seed with an additional parameter, e.g. `--seed 42`.
-
-Training can be monitored with Tensorboard.
-```
-tensorboard --logdir=src/logdir
-```
-
-## Environments
-
-The repository includes the Atari games.
-If you wish to test the algorithm on different environments, you can add them to the `init_env` function in the [utils.py](https://github.com/remosasso/PSDRL-new/blob/master/src/PSDRL/common/utils.py#L18) file.
-
-The implementation targets environments with visual observation that are grayscale in range zero-one and of dimension 64x64, so please take that into account when using new environments (see `preprocess_image` in [utils.py](https://github.com/remosasso/PSDRL-new/blob/master/src/PSDRL/common/utils.py#L38) which the agent uses for all inputs).
-
-If you wish to test the algorithm on environments with vectorial observations, you can either implement a different architecture for the autoencoder (see [representation.py](https://github.com/remosasso/PSDRL-new/blob/master/src/PSDRL/networks/representation.py)) or remove the autoencoder altogether.
-
-Feel free to reach out if you need any help.
-
-
-## Runtime
-The implementation found in this repository runs on a single GPU and takes about 8 and 15 hours per 1M environment steps in Atari on an NVIDIA A100 and NVIDIA V100 GPU, respectively. The table below shows the expected runtime for an A100 GPU.
-
-| Game     | Runtime         |
-|----------|---------------|
-| Freeway  | 8h53m $\pm$ 0m |
-| Qbert    | 7h39m $\pm$ 43m |
-| Enduro   | 9h35m $\pm$ 15m |
-| Asterix  | 7h44m $\pm$ 24m |
-| Seaquest | 8h31m $\pm$ 2m  |
-| Pong     | 7h58m $\pm$ 42m |
-| Hero     | 9h26m $\pm$ 2m  |
-| **Average**  | **8h31m $\pm$ 44m** |
-
- See Appendix E of the paper for a comparison with the baselines. 
-
-
-## Tips
-
-You can track additional metrics by calling the `add_scalars` function of the [Logger](https://github.com/remosasso/PSDRL-new/blob/master/src/PSDRL/common/logger.py) object.

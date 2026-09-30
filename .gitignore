@@ -1,4 +1,14 @@
-/src/logdir
+# run outputs
+logdir/
+runlogs/
+hpo_artifacts/
+mlruns/
+*.pt
+*.db
+# environments / editors
 /venv
+/.venv
 /.idea
-*__pycache__
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

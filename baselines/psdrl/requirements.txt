@@ -1,0 +1,5 @@
+gym[atari]
+Pillow
+ruamel.yaml
+scikit_image
+torch

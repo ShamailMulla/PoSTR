@@ -1,0 +1,55 @@
+gpu: false
+data_dir: ""
+save: true
+save_freq: 5000
+load: false
+load_dir: ""
+visual: false
+
+algorithm:
+  name: PSDRL
+  reward_prior: 0.0001
+  transition_prior: 0.0001
+  update_freq: 250
+  warmup_length: 2500
+  warmup_freq: 250
+  policy_noise: 0.05
+
+experiment:
+  suite: bsuite
+  env: deepsea-5
+  test: true
+  steps: 100000
+  time_limit: 25
+  test_freq: 2500
+  name: deepsea5
+  seed: ~
+
+replay:
+  capacity: 10000
+  batch_size: 32
+  sequence_length: 5
+
+transition:
+  training_iterations: 5
+  hidden_dim: 256
+  gru_dim: 128
+  learning_rate: 0.0001
+  window_length: 1
+
+value:
+  training_iterations: 5
+  hidden_dim: 64
+  learning_rate: 0.0001
+  target_update_freq: 4
+  discount: 0.9
+
+terminal:
+  training_iterations: 3
+  hidden_dim: 64
+  learning_rate: 0.0001
+
+representation:
+  training_iterations: 0
+  learning_rate: 0.0001
+  embed_dim: 25

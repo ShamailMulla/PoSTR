@@ -1,0 +1,63 @@
+gpu: true
+data_dir: ''
+save: false
+save_freq: 1000
+load: false
+load_dir: ./logdir/[env]/BTRL-[name]/[seed]/checkpoints/[timestep]/
+visual: false
+algorithm:
+  name: BTRL
+  update_freq: 100
+  warmup_length: 10
+  warmup_freq: 10
+  policy_noise: 0.0
+  n_samples: 1
+  temp: 0.0001
+  neural_linear: true
+  noise_variance: 1.0
+  blr_coefficient: 100.0
+  transition_temp: 1.0
+  reward_temp: 1.0
+  # explore_temp deliberately ABSENT: acting samples from the true posterior
+  # (defaults to transition_temp = 1.0). This is the ring-only ablation —
+  # exploration spread must come from the data-coupled BLR covariance, not a
+  # foreign constant tuned on this environment.
+experiment:
+  suite: bsuite
+  env: '5'
+  test: true
+  deterministic: true
+  steps: 1000000
+  time_limit: 6
+  test_freq: 1000
+  name: v5_ring_only
+  seed: null
+replay:
+  capacity: 10000
+  batch_size: 100
+  sequence_length: 6
+  protected_fraction: 0.1
+transition:
+  obs_type: grid
+  training_iterations: 10
+  hidden_dim: 512
+  learning_rate: 0.004132765459466363
+  window_length: 3
+  context_length: 2
+  num_encoder_layers: 3
+  heads: 4
+  forward_expansion: 2
+  p_seq: 0.0
+  p_attn: 0.0
+value:
+  training_iterations: 50
+  hidden_layers: 3
+  hidden_dim: 16
+  learning_rate: 0.0026956306023347178
+  target_update_freq: 50
+  discount: 0.95
+terminal:
+  training_iterations: 3
+  hidden_layer: 1
+  hidden_dim: 8
+  learning_rate: 0.001

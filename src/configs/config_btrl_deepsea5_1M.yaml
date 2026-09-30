@@ -1,0 +1,62 @@
+gpu: true
+data_dir: ""
+save: true
+save_freq: 50000
+load: false
+load_dir: "./logdir/[env]/BTRL-[name]/[seed]/checkpoints/[timestep]/"
+visual: false
+
+algorithm:
+  name: BTRL
+  update_freq: 10
+  warmup_length: 100
+  warmup_freq: 10
+  policy_noise: 0.0
+  n_samples: 1
+  temp: 0.0001
+
+experiment:
+  suite: bsuite
+  env: "5"
+  test: true
+  deterministic: true
+  steps: 1000000
+  time_limit: 6
+  test_freq: 5000
+  name: "DeepSea5-1M"
+  seed: ~
+
+# capacity in transitions; sequence_length overridden by main.py to env+1=6
+replay:
+  capacity: 50000
+  batch_size: 100
+  sequence_length: 6
+
+# Transformer transition model (BayesFormer) — EpisodeLockedDropout enabled via p_seq/p_attn
+# Params from optuna_transition_hparam_search.ipynb best balanced trial (Trial 70 / 100)
+transition:
+  obs_type: "grid"
+  training_iterations: 5
+  hidden_dim: 256
+  learning_rate: 0.00112
+  window_length: 3
+  context_length: 1
+  num_encoder_layers: 1
+  heads: 1
+  forward_expansion: 2
+  p_seq: 0.1
+  p_attn: 0.15
+
+# Value network — Optuna-optimal params (btrl_value_params.json, 60-trial NSGA-II search)
+value:
+  training_iterations: 10
+  hidden_layers: 2
+  hidden_dim: 256
+  learning_rate: 0.01
+  target_update_freq: 50
+  discount: 0.95
+
+terminal:
+  training_iterations: 5
+  hidden_dim: 100
+  learning_rate: 0.001
