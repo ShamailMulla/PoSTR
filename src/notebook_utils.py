@@ -11,9 +11,12 @@ from torch.nn import functional as F
 from TRL.common.utils import init_env, env_reset, env_step, compute_state_loss
 
 
-def make_env(size, deterministic=True, seed=0):
-    """Thin wrapper around bsuite DeepSea — avoids gym_wrapper (requires gym, not installed)."""
-    env = DeepSea(size, deterministic=deterministic, randomize_actions=False, seed=seed)
+def make_env(size, deterministic=True, seed=0, randomize_actions=True, mapping_seed=0):
+    """Thin wrapper around bsuite DeepSea — avoids gym_wrapper (requires gym, not installed).
+    randomize_actions=True is standard DeepSea (per-cell action mapping from mapping_seed);
+    the July 2026 notebooks used randomize_actions=False."""
+    env = DeepSea(size, deterministic=deterministic, randomize_actions=randomize_actions,
+                  seed=seed, mapping_seed=mapping_seed)
     return env
 
 def ds_reset(env):
@@ -27,7 +30,8 @@ def ds_step(env, action):
     return obs, rew, bool(done)
 
 
-def generate_transition_data(config_or_size, num_transitions_or_ctx=1000, num_transitions=None):
+def generate_transition_data(config_or_size, num_transitions_or_ctx=1000, num_transitions=None,
+                             randomize_actions=True, mapping_seed=0):
     """
     Generate training transitions and a per-state test set.
 
@@ -54,7 +58,8 @@ def generate_transition_data(config_or_size, num_transitions_or_ctx=1000, num_tr
         ctx_len  = int(cfg['transition']['context_length'])
         n_trans  = int(num_transitions_or_ctx)
 
-    env       = make_env(env_size, deterministic=True, seed=0)
+    env       = make_env(env_size, deterministic=True, seed=0,
+                         randomize_actions=randomize_actions, mapping_seed=mapping_seed)
     obs_space = env_size * env_size
     n_actions = env.action_spec().num_values
     possible_actions = torch.arange(n_actions)

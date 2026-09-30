@@ -54,6 +54,35 @@ def sync(client, exp_id, parent_id, study, objective_names):
     return added, complete
 
 
+class MLflowTrialLogger:
+    """Optuna callback: log each finished trial to MLflow as it completes.
+
+        study.optimize(objective, callbacks=[MLflowTrialLogger("HPO ...", "Stage 1 ...")])
+    """
+
+    def __init__(self, experiment, run_name, objective_names=("mean_grid_dist", "overconfident_error_rate"),
+                 params=None):
+        mlflow.set_tracking_uri(URI)
+        self.client = mlflow.MlflowClient()
+        exp = self.client.get_experiment_by_name(experiment)
+        self.exp_id = exp.experiment_id if exp else self.client.create_experiment(experiment)
+        runs = self.client.search_runs([self.exp_id], f"attributes.run_name = '{run_name}'")
+        self.parent_id = runs[0].info.run_id if runs else self.client.create_run(
+            self.exp_id, run_name=run_name).info.run_id
+        if params and not runs:
+            for k, v in params.items():
+                self.client.log_param(self.parent_id, k, v)
+        self.objective_names = list(objective_names)
+
+    def __call__(self, study, trial):
+        sync(self.client, self.exp_id, self.parent_id, study, self.objective_names)
+
+    def finish(self, notebook=None):
+        if notebook and os.path.exists(notebook):
+            self.client.log_artifact(self.parent_id, notebook)
+        self.client.set_terminated(self.parent_id, "FINISHED")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--storage", required=True)
