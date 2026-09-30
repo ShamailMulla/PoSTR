@@ -4,6 +4,71 @@ Session-by-session log. Newest entries at the top. Each entry covers discoveries
 
 ---
 
+## Session: 2026-09-25/26 — Recovery, rerun, and the planning proposal
+
+Context: the thesis folder and Claude transcripts were lost; code and wiki were
+rebuilt from backups into `recovered_thesis/`, and PoSTR `postr_det` (5 seeds × 1M)
+was rerun with MLflow tracking and per-cycle tracing (1 in 20 update cycles).
+
+### ✅ What Works
+- **Discovery reproduces:** first treasure within 25 steps on every seed (3/5 on the
+  exact same step as July).
+- **The floor reproduces:** all seeds end at 11.5–13.8% solve rate over the last 100k
+  (July: 11–13%).
+- **Tracing localises collapses:** each collapse starts at a feature-drift spike
+  (seed 3 at 529→531k: drift 0.198 vs ~1e-4; posterior distinct states 4→1).
+
+### ❌ What Didn't Work / Gotchas
+- **"Flat value net causes the failure" is wrong:** V is constant even during 99%
+  phases. The policy is the BLR reward margin.
+- **"The floor is an attractor" is wrong:** seed 3 escaped the floor at ~520k and
+  re-solved to 99% before collapsing again.
+- **July seed 1 was an outlier:** its 800k-step plateau did not recur (rerun seed 1
+  never learned; 1 of 10 runs across both). PoSTR's July mean-regret advantage over
+  PSDRL depended on it — use medians and discovery/floor results.
+- **Sampling-schedule hybrid in v3+:** mid-episode posterior redraw; value net trained
+  and used under different samples ([[dithering-trap]] § Known issue).
+- **Benchmark:** runs use `randomize_actions=False`, where "always right" is optimal
+  everywhere, so DeepSea cannot separate planning from an action bias.
+- **Infrastructure:** a lid-close suspend kills CUDA runs (Xid 31) and can leave CUDA
+  unusable until reboot; `btrl.py` then silently falls back to CPU. Launch scripts now
+  check CUDA, hold a sleep inhibitor, and write 20k-step resume checkpoints.
+- **Markov check (2026-09-26):** the transformer's next-state prediction depends on the
+  previous state in 25–50% of cases on healthy checkpoints — spurious, since DeepSea is
+  Markov. Supports Option 1 in [[planning-in-sampled-model]].
+- **Feature collapse:** seed 1 (whole run) and seed 3 (≤500k) have constant transformer
+  features; predictions are worse than the majority class. Healthy-feature seeds still
+  sit at the floor with ~0.001 reward margins.
+- **Reward model is fine; propagation is not (2026-09-26):** on healthy checkpoints
+  the BLR reward model is near-exact (R² ≈ 1, goal margin +0.7, learns the −0.002 move
+  cost). With an inert value net, one-step greedy then prefers *left* everywhere except
+  the goal cell. See [[planning-in-sampled-model]] §11.6.
+- **Task mismatch:** PoSTR trains on non-randomized DeepSea with an `env_step` override
+  (episode ends with 0.99 on reaching the bottom-right cell, 4 steps); the PSDRL
+  baseline trains on standard randomized DeepSea. PoSTR-vs-PSDRL numbers compare
+  different tasks. ([[planning-in-sampled-model]] §9)
+- **Randomized DeepSea comparison (2026-09-28/30, `RANDOMIZED_COMPARISON_REPORT.md`):**
+  PSDRL (prior 1e-3) learns on 4/5 seeds and holds its 88% ceiling (policy_noise 0.05 →
+  0.975⁵); PoSTR stays at the random rate (~3%) on all 5, median regret 192.9k vs 54.4k.
+  PoSTR still finds the treasure first (median 1,001 vs 6,395 steps) but never keeps it.
+  Value net flat on 4/5 seeds — prediction P1 of [[planning-in-sampled-model]] confirmed.
+- **Reward-loss shape bug — fixed 2026-09-26:** `transition.py:82` (and the same pattern
+  in `btrl.py`'s freeze-check validation loss) compared `[100,1]` with `[100,1,1]`,
+  broadcasting the loss over all 100×100 prediction/target pairs. Present in every run
+  before the fix. Now `view_as(return_preds)`.
+- **Switched to randomized DeepSea (2026-09-26)** in both codebases; also fixed PSDRL's
+  train/test envs having different random action mappings. July PSDRL test numbers
+  are on a different task from its training. ([[planning-in-sampled-model]] §9)
+
+### 🔬 Open Questions
+- Does exact planning in the posterior sample + fixed-φ epochs retain the solution on
+  randomized DeepSea? ([[planning-in-sampled-model]] §10)
+- Does the transformer's prediction actually depend on history? (Markov check, §11)
+- Is the collapse caused by the φ jump, or do both follow something earlier? Trace
+  every cycle around a collapse to order the events.
+
+---
+
 ## Session: 2026-07-13/14 — BayesFormer vs PSDRL Uncertainty; Return to Neural-Linear
 
 The deciding question of this phase: after swapping GRU → Transformer, which of the

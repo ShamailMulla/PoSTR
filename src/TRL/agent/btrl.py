@@ -10,6 +10,7 @@ from ..networks.terminal import Network as TerminalNetwork
 from ..networks.transition import Network as TransitionNetwork
 from ..networks.value import Network as ValueNetwork
 from ..bayes.transformer_rl_agent import BayesianTransformer
+from ..common import tracing
 from ..bayes.neural_linear_head import NeuralLinearHead
 from ..training.transition import TransitionModelTrainer
 from ..training.policy_btrl import PolicyTrainer
@@ -165,11 +166,12 @@ class BTRL:
                     obs_type=self.transition_trainer.obs_type,
                     obs_space=self.transition_trainer.obs_space,
                 )
-                r_loss = torch.nn.functional.mse_loss(return_preds, r[:, idx].unsqueeze(1))
+                r_loss = torch.nn.functional.mse_loss(return_preds, r[:, idx].view_as(return_preds))
                 total += (s_loss + r_loss).item()
                 count += 1
         return total / max(count, 1)
 
+    @tracing.traced("BTRL.check_freeze")
     def _check_freeze(self, timestep: int):
         val_loss = self._validation_loss()
         self.dataset.logger.add_scalars("Phi/Val_Loss", val_loss)
@@ -204,6 +206,7 @@ class BTRL:
                       f"(val loss {val_loss:.5f}, best {self._best_val_loss:.5f}, "
                       f"stalled {self._val_stall} update cycles) ***")
 
+    @tracing.traced("BTRL.posterior_probe")
     def _log_phi_metrics(self):
         """Log feature drift on the fixed probe set and the posterior-alive
         readout (distinct sampled next-states / modal fraction), every update."""
@@ -242,6 +245,18 @@ class BTRL:
                  if hasattr(m, "adapter_norm")]
         if norms:
             self.dataset.logger.add_scalars("Phi/Adapter_Norm", float(np.mean(norms)))
+
+    def _value_probe(self):
+        """V over every one-hot state: std ~0 means the value net is a constant (report, 2026-07-19)."""
+        try:
+            layers = self.value_network.layers
+            n = next(m for m in layers.modules() if isinstance(m, torch.nn.Linear)).in_features
+            dev = next(layers.parameters()).device
+            with torch.no_grad():
+                v = layers(torch.eye(n, device=dev)).flatten()
+            return {"value_onehot_mean": v.mean().item(), "value_onehot_std": v.std().item()}
+        except Exception as e:  # probe must never break training
+            return {"value_probe_error": repr(e)}
 
     def select_action(self, current_state: np.array, step: int):
         """
@@ -291,19 +306,24 @@ class BTRL:
         )
         if ep and timestep % update_freq == 0:
             print('\n\n','*'*30,'Beginning training','*'*30,'\n')
-            # print('Training dataset\n',self.dataset.tmp_episode)
-            # v6: once phi is frozen, the gradient stage is skipped entirely —
-            # the BLR refit below carries all further model learning.
-            # v8 (freeze_mode "lora"): the gradient stage keeps running after
-            # the freeze; only the adapters receive gradients.
-            if not self.phi_frozen or self.freeze_mode == "lora":
-                self.transition_trainer.train_(self.dataset)
-                if not self.phi_frozen and self.freeze_phi_enabled:
-                    self._check_freeze(timestep)
-            # v3: refit the neural-linear posterior on the freshly-trained features
-            # (and draw a sample) BEFORE the value network trains under it.
-            if self.neural_linear:
-                self.model.head.update_posteriors(self.dataset)
-                self._log_phi_metrics()
-            self.policy_trainer.train_(self.model, self.dataset)
+            with tracing.cycle(timestep, phi_frozen=self.phi_frozen) as tc:
+                # print('Training dataset\n',self.dataset.tmp_episode)
+                # v6: once phi is frozen, the gradient stage is skipped entirely —
+                # the BLR refit below carries all further model learning.
+                # v8 (freeze_mode "lora"): the gradient stage keeps running after
+                # the freeze; only the adapters receive gradients.
+                if not self.phi_frozen or self.freeze_mode == "lora":
+                    self.transition_trainer.train_(self.dataset)
+                    if not self.phi_frozen and self.freeze_phi_enabled:
+                        self._check_freeze(timestep)
+                # v3: refit the neural-linear posterior on the freshly-trained features
+                # (and draw a sample) BEFORE the value network trains under it.
+                if self.neural_linear:
+                    self.model.head.update_posteriors(self.dataset)
+                    self._log_phi_metrics()
+                self.policy_trainer.train_(self.model, self.dataset)
+                if tc.on:
+                    tc.outputs = {k: v for k, v in self.dataset.logger.log["scalars"].items()
+                                  if k.startswith(("Loss/", "Phi/")) and isinstance(v, (int, float))}
+                    tc.outputs.update(self._value_probe())
             print('\n\n', '*' * 30, 'Finished training', '*' * 30, '\n')

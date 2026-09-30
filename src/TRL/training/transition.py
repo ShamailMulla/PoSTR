@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from ..common.replay import Dataset
 from ..common.utils import compute_state_loss
+from ..common import tracing
 
 
 class TransitionModelTrainer:
@@ -33,6 +34,7 @@ class TransitionModelTrainer:
         self.networks = [self.transition_network, self.terminal_network]
 
 
+    @tracing.traced("TransitionModelTrainer.train", span_type="CHAIN", capture_args=False)
     def train_(self, dataset: Dataset):
         """
         Update the recurrent transition model and the terminal model simultaneously using B sequences of length L for
@@ -77,7 +79,9 @@ class TransitionModelTrainer:
                     obs_space=self.obs_space,
                 )
                 self.transition_network.loss += transition_s1_loss
-                transition_r_loss = F.mse_loss(return_preds, r[:, idx].unsqueeze(1))
+                # view_as, not unsqueeze(1): r[:, idx] is already (B, 1); unsqueezing made the
+                # target (B, 1, 1) and broadcast the loss over all B x B prediction/target pairs.
+                transition_r_loss = F.mse_loss(return_preds, r[:, idx].view_as(return_preds))
                 self.transition_network.loss += transition_r_loss
 
                 print('transition loss:',transition_s1_loss.item(), '\trewards loss:',transition_r_loss.item())

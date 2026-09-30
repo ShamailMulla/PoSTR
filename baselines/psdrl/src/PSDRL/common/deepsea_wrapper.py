@@ -7,8 +7,12 @@ from bsuite.environments import deep_sea, memory_chain
 class DeepSeaGymEnv:
     """Wraps bsuite DeepSea as a gym-5-tuple interface for use with main.py."""
 
-    def __init__(self, size: int = 5, deterministic: bool = True, seed: int = 0):
-        self._env = deep_sea.DeepSea(size=size, deterministic=deterministic, seed=seed)
+    def __init__(self, size: int = 5, deterministic: bool = True, seed: int = 0, mapping_seed: int = 0):
+        # randomize_actions is bsuite's default (True). mapping_seed must be set and shared
+        # by train and test envs: with mapping_seed=None bsuite draws a fresh random action
+        # mapping per env, so the test env was a different task from training.
+        self._env = deep_sea.DeepSea(size=size, deterministic=deterministic, seed=seed,
+                                     mapping_seed=mapping_seed)
         self.action_space = SimpleNamespace(n=2)
         self.observation_space = SimpleNamespace(shape=(size * size,))
 

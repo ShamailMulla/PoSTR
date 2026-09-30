@@ -77,6 +77,9 @@ def run_agent_trial(config: dict, seed: int, total_steps: int, quiet: bool = Tru
         env, actions, _, obs_space = init_env(
             suite, config["experiment"]["env"], test=False,
             deterministic=config["experiment"]["deterministic"],
+            randomize_actions=config["experiment"].get("randomize_actions", True),
+            mapping_seed=config["experiment"].get("mapping_seed", seed),
+            legacy_goal=config["experiment"].get("legacy_goal", False),
         )
         agent = BTRL(config, actions, Logger(NullDataManager()), obs_space, seed)
 

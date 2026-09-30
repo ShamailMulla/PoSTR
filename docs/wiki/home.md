@@ -11,6 +11,7 @@ Bayesian Transformer Reinforcement Learning — research wiki for the MSc thesis
 - [[btrl]] — This thesis: BayesFormer as the transition model inside PSDRL
 - [[thompson-sampling]] — The exploration strategy underpinning PSDRL and BTRL
 - [[variational-inference]] — Theoretical grounding for dropout-as-Bayes
+- [[planning-in-sampled-model]] — **Proposal (2026-09):** drop the value net, plan exactly in each posterior sample — PSRL theory, regret, open proofs
 
 ## Architecture
 
@@ -24,7 +25,7 @@ Bayesian Transformer Reinforcement Learning — research wiki for the MSc thesis
 ## Version History & Failure Modes
 
 - [[failure-modes]] — **Start here.** The two-options narrative (BayesFormer vs PSDRL uncertainty), the version arc, and every failure + its diagnostic methodology
-- [[dithering-trap]] — v1 bug: step-wise mask resampling destroys exploration → [[episode-locked-dropout]]
+- [[dithering-trap]] — v1 bug: step-wise mask resampling destroys exploration → [[episode-locked-dropout]]; also scheduled vs per-step resampling, and the v3+ mid-episode redraw
 - [[representation-drift]] — v1 bug: non-stationary hidden states prevent value learning → [[episode-locked-dropout]]
 - [[neural-linear-head]] — Why dropout was set aside and BTRL returned to PSDRL's data-coupled posterior
 

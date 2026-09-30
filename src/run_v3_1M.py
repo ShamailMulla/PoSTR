@@ -9,6 +9,7 @@ holds the plateau where every dropout variant collapsed).
 """
 import argparse
 import json
+import os
 from datetime import datetime as dt
 
 import numpy as np
@@ -19,7 +20,8 @@ from TRL.tuning.common import load_config
 
 
 def run(seed: int, config_path: str, name: str, temp: float = None, steps: int = 1_000_000,
-        save_freq: int = 100_000, explore_temp: float = None):
+        save_freq: int = 100_000, explore_temp: float = None, resume_from: str = None,
+        resume_freq: int = 20_000):
     np.random.seed(seed); torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
@@ -33,10 +35,24 @@ def run(seed: int, config_path: str, name: str, temp: float = None, steps: int =
         cfg["algorithm"]["explore_temp"] = explore_temp   # wide acting/exploration spread
     cfg["save"] = True
     cfg["save_freq"] = save_freq
+    cfg["experiment"]["resume_freq"] = resume_freq   # rolling checkpoints/latest/resume.pt
+    if resume_from:
+        cfg["resume_from"] = resume_from
     print(f"[{dt.now():%H:%M:%S}] v3 seed={seed} | name={cfg['experiment']['name']} "
           f"| deterministic={cfg['experiment']['deterministic']} "
           f"| neural_linear={cfg['algorithm']['neural_linear']}")
-    main.main(cfg, seed)
+    run_id = os.environ.get("MLFLOW_RUN_ID")
+    if not run_id:
+        main.main(cfg, seed)
+        return
+    # Attach to the run mlflow_sync.py created, so traces (TRL/common/tracing.py)
+    # and system metrics land on it; the sync script logs the training metrics.
+    import mlflow
+    mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000"))
+    mlflow.set_system_metrics_sampling_interval(30)
+    mlflow.enable_system_metrics_logging()
+    with mlflow.start_run(run_id=run_id):
+        main.main(cfg, seed)
 
 
 if __name__ == "__main__":
@@ -48,5 +64,7 @@ if __name__ == "__main__":
     p.add_argument("--steps", type=int, default=1_000_000)
     p.add_argument("--save_freq", type=int, default=100_000)
     p.add_argument("--explore_temp", type=float, default=None)
+    p.add_argument("--resume_from", type=str, default=None, help="path to a resume.pt checkpoint")
+    p.add_argument("--resume_freq", type=int, default=20_000)
     a = p.parse_args()
-    run(a.seed, a.config, a.name, a.temp, a.steps, a.save_freq, a.explore_temp)
+    run(a.seed, a.config, a.name, a.temp, a.steps, a.save_freq, a.explore_temp, a.resume_from, a.resume_freq)

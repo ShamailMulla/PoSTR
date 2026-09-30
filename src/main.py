@@ -48,6 +48,8 @@ def run_experiment(env, agent: Agent, logger: Logger, test_env,
     start_time = dt.now()
     ep = start_ep
     experiment_step = start_step # controls when the model gets updated (training)
+    resume_freq = config.get("resume_freq")
+    next_resume = (start_step // resume_freq + 1) * resume_freq if resume_freq else None
 
     while experiment_step <= config['steps']: # controls the number of interactions/episodes with the environment
         episode_step = 1 # controls the number of steps agent takes in the env before episode concludes
@@ -104,6 +106,17 @@ def run_experiment(env, agent: Agent, logger: Logger, test_env,
             experiment_step, train_reward=episode_reward, test_reward=np.nan
         )
 
+        # Rolling resume point, so a crash or suspend loses at most resume_freq steps.
+        # Taken only between episodes: the replay buffer's in-progress episode is not
+        # part of the checkpoint, so a mid-episode save cannot be resumed. Written to
+        # .tmp then renamed, so an interrupted write never leaves a truncated resume.pt.
+        if save and resume_freq and experiment_step >= next_resume:
+            latest = logger.data_manager.logdir + "checkpoints/latest/"
+            os.makedirs(latest, exist_ok=True)
+            save_checkpoint(agent, experiment_step, ep, latest + "resume.pt.tmp")
+            os.replace(latest + "resume.pt.tmp", latest + "resume.pt")
+            next_resume = (experiment_step // resume_freq + 1) * resume_freq
+
     logger.data_manager.save(agent, experiment_step)
     print('\nFinal performance:')
     test_reward = run_test_episode(test_env, agent, config['time_limit'], config['suite'])
@@ -114,9 +127,12 @@ def main(config: dict, iter:int = 10):
     data_manager = DataManager(config)
     logger = Logger(data_manager)
 
-    env, actions, test_env, obs_space = init_env(config["experiment"]["suite"], config["experiment"]["env"],
-                                                 config["experiment"]["test"],
-        deterministic=config["experiment"]["deterministic"]
+    exp = config["experiment"]
+    env, actions, test_env, obs_space = init_env(exp["suite"], exp["env"], exp["test"],
+        deterministic=exp["deterministic"],
+        randomize_actions=exp.get("randomize_actions", True),
+        mapping_seed=exp.get("mapping_seed", exp["seed"]),
+        legacy_goal=exp.get("legacy_goal", False),
     )
 
     agent = Agent(config, actions, logger, obs_space, config["experiment"]["seed"])

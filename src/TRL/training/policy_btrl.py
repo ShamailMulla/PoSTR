@@ -6,6 +6,7 @@ from ..bayes.transformer_rl_agent import BayesianTransformer
 from ..common.replay import Dataset
 from ..common.settings import TP_THRESHOLD
 from ..common.utils import project_onehot
+from ..common import tracing
 
 
 class PolicyTrainer:
@@ -34,6 +35,7 @@ class PolicyTrainer:
 
         self.num_actions = len(actions)
 
+    @tracing.traced("PolicyTrainer.train_iter", max_calls=6)
     def train_iter(self, inputs: torch.tensor, targets: torch.tensor):
         self.value_network.optimizer.zero_grad()
 
@@ -43,6 +45,7 @@ class PolicyTrainer:
         self.value_network.loss.backward()
         self.value_network.optimizer.step()
 
+    @tracing.traced("PolicyTrainer.simulate", span_type="TOOL", max_calls=6)
     def simulate(self, observation, time_transition, model: BayesianTransformer):
         """
         Simulate one timestep using the sampled model,
@@ -58,6 +61,7 @@ class PolicyTrainer:
             terminals
         )
 
+    @tracing.traced("PolicyTrainer.compute_targets", max_calls=6)
     def compute_targets(self, rewards: torch.tensor, next_states: torch.tensor, terminals: torch.tensor, target_net: torch.nn.Sequential):
         """
         Learns value of states
@@ -75,6 +79,7 @@ class PolicyTrainer:
 
         return target_value.reshape(-1, 1)
 
+    @tracing.traced("PolicyTrainer.train_value", span_type="CHAIN", capture_args=False)
     def train_(self, model: BayesianTransformer, dataset: Dataset):
         """
         Update the value network using B sequences of length L for the specified number of training iterations (kappa).

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from ..agent.psdrl import PSDRL
 
 
-def init_env(suite: str, env: str, test: bool, deterministic: bool = True):
+def init_env(suite: str, env: str, test: bool, deterministic: bool = True, mapping_seed: int = 0):
     if suite == "atari":
         import gym  # only needed for Atari
         full_game_name = "{}NoFrameskip-v4".format(env)
@@ -35,8 +35,10 @@ def init_env(suite: str, env: str, test: bool, deterministic: bool = True):
         # deterministic=False is "windy" DeepSea: the `right` action fails with
         # probability 1/N, so the optimal always-right policy reaches the goal
         # with probability (1-1/N)^N (~33% for N=5), not 100%.
-        environment = DeepSeaGymEnv(size=ds_size, deterministic=deterministic, seed=0)
-        test_environment = DeepSeaGymEnv(size=ds_size, deterministic=deterministic, seed=1) if test else None
+        mapping_seed = 0 if mapping_seed is None else mapping_seed
+        environment = DeepSeaGymEnv(size=ds_size, deterministic=deterministic, seed=0, mapping_seed=mapping_seed)
+        test_environment = DeepSeaGymEnv(size=ds_size, deterministic=deterministic, seed=1,
+                                         mapping_seed=mapping_seed) if test else None
     elif suite == "bsuite_memory":
         mem_len = int(str(env).split("-")[1]) if "-" in str(env) else int(env)
         environment = MemoryChainGymEnv(memory_length=mem_len, seed=0)

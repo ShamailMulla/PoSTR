@@ -94,6 +94,7 @@ def main(config: dict):
     env, actions, test_env = init_env(
         exp_config["suite"], exp_config["env"], exp_config["test"],
         deterministic=exp_config.get("deterministic", True),
+        mapping_seed=exp_config.get("mapping_seed", exp_config.get("seed")),
     )
 
     agent = PSDRL(config, actions, logger, config["experiment"]["seed"])

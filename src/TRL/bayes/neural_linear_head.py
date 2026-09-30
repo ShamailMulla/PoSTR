@@ -17,6 +17,7 @@ import numpy as np
 import torch
 
 from ..common.utils import extract_episode_data
+from ..common import tracing
 
 
 class NeuralLinearHead:
@@ -105,6 +106,7 @@ class NeuralLinearHead:
         return X, Y
 
     # ---- closed-form Bayesian linear regression -------------------------------
+    @tracing.traced("NeuralLinearHead.update_posteriors", capture_args=False)
     def update_posteriors(self, dataset):
         X, Y = self.compute_feature_maps(dataset)
         Lam = self.noise_variance * (X.T @ X)          # data precision (D,D)

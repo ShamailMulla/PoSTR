@@ -20,9 +20,19 @@ class _DeepSeaWrapper:
     Minimal gym-style wrapper around bsuite DeepSea that avoids bsuite.utils.gym_wrapper
     (which requires the legacy `gym` package, not installed in this venv).
     """
-    def __init__(self, size: int, deterministic: bool = True, seed: int = 0):
-        self._env = DeepSea(size, deterministic=deterministic, randomize_actions=False, seed=seed)
+    def __init__(self, size: int, deterministic: bool = True, seed: int = 0,
+                 randomize_actions: bool = True, mapping_seed: int = 0, legacy_goal: bool = False):
+        # randomize_actions=True is the real DeepSea: which action index means "right"
+        # is drawn per cell from mapping_seed. Train and test environments must share
+        # mapping_seed, otherwise they are different tasks (bsuite draws a fresh random
+        # mapping when mapping_seed is None).
+        self._env = DeepSea(size, deterministic=deterministic, randomize_actions=randomize_actions,
+                            seed=seed, mapping_seed=mapping_seed)
         self._size = size
+        # legacy_goal reproduces the pre-2026-09 BTRL task: reaching the bottom-right cell
+        # ends the episode with reward 0.99 (4 steps), instead of bsuite's +1 for moving
+        # right *from* that cell on step 5. Only for reproducing old runs.
+        self._legacy_goal = legacy_goal
 
     def reset(self) -> np.ndarray:
         ts = self._env.reset()
@@ -33,6 +43,8 @@ class _DeepSeaWrapper:
         obs  = ts.observation.flatten().astype(np.float32)
         rew  = float(ts.reward) if ts.reward is not None else 0.0
         done = bool(ts.last())
+        if self._legacy_goal and obs[-1] == 1:
+            done, rew = True, 0.99
         return obs, rew, done, {}
 
     def action_spec(self):
@@ -72,14 +84,20 @@ class _MemoryChainWrapper:
         return self._env.observation_spec()
 
 
-def init_env(suite: str, env: str, test: bool, deterministic: bool = True):
+def init_env(suite: str, env: str, test: bool, deterministic: bool = True,
+             randomize_actions: bool = True, mapping_seed: int = 0, legacy_goal: bool = False):
     if suite.lower() == "bsuite":
-        environment = _DeepSeaWrapper(int(env), deterministic=deterministic, seed=0)
-        print('deterministic:', deterministic)
+        if randomize_actions and mapping_seed is None:
+            mapping_seed = 0   # never let bsuite draw an unseeded mapping (train/test would differ)
+        kw = dict(deterministic=deterministic, randomize_actions=randomize_actions,
+                  mapping_seed=mapping_seed, legacy_goal=legacy_goal)
+        environment = _DeepSeaWrapper(int(env), seed=0, **kw)
+        print('deterministic:', deterministic, '| randomize_actions:', randomize_actions,
+              '| mapping_seed:', mapping_seed, '| legacy_goal:', legacy_goal)
 
         test_environment = None
         if test:
-            test_environment = _DeepSeaWrapper(int(env), deterministic=deterministic, seed=1)
+            test_environment = _DeepSeaWrapper(int(env), seed=1, **kw)   # same task as training
 
         action_space = environment.action_spec().num_values
         observation_space = int(np.prod(environment.observation_spec().shape))
@@ -98,9 +116,6 @@ def env_step(env: "Env", suite: str, action: int):
     if suite == "bsuite":
         observation, reward, done, _ = env.step(action)
         observation = observation.flatten()
-        if observation[-1] == 1:
-            done = True
-            reward = 0.99
         truncated = False
     elif suite == "bsuite_memory":
         observation, reward, done, _ = env.step(action)

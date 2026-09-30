@@ -24,6 +24,9 @@ experiment:
   env: '5'
   test: true
   deterministic: true
+  randomize_actions: true   # real DeepSea: per-cell action mapping (false = pre-2026-09 debug mode)
+  legacy_goal: false        # true reproduces the pre-2026-09 task (episode ends with 0.99 on reaching the corner)
+  # mapping_seed: defaults to the run seed, shared by train and test envs
   steps: 1000000
   time_limit: 6
   test_freq: 1000
